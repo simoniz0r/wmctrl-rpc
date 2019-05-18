@@ -179,7 +179,7 @@ case "$1" in
         ;;
     window|win) wmctrl.win_select;;
     *) 
-        if ! ps aux | grep '\./easyrp' | grep -vq grep; then
+        if [[ ! -f "$ERP_LOCK_FILE" && ! "$(ps aux | grep '\./easyrp' | grep -vq grep)" ]]; then
             echo "Starting wmctrl-rpc..."
             wmctrl.get_easyrp
             # check for config file and select window if doesn't exist
@@ -210,7 +210,7 @@ case "$1" in
                 exit 1
             fi
         else
-            echo "EasyRP is already running:"
+            echo "EasyRP is already running or lock file '$ERP_LOCK_FILE' exists"
             ps aux | grep '\./easyrp' | grep -v grep
         fi
         ;;
