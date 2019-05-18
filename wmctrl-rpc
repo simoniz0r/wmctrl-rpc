@@ -9,10 +9,33 @@
 export ERP_CLIENTID="575030591938887703"
 # set EasyRP directory
 export ERP_DIR="$HOME/.local/share/wmctrl-rpc"
-# list of valid icons
-export ERP_ICON_LIST=("code" "chrome" "falkon" "firefox" "generic-window" "kitty" "mpv" "opensuse" "tux")
+# set lock file location
+export ERP_LOCK_FILE="/tmp/.wmctrl-rpc-8675309.lock"
+# function to write EasyRP's config file with variables from wmctrl.get_title function
+wmctrl.write_config() {
+local ERP_STATE="$1"
+local ERP_DETAILS="$2"
+local ERP_TIME_START="$3"
+local ERP_ICON="$4"
+cat > "$ERP_DIR"/config.ini << EOL
+[Identifiers]
+ClientID=$ERP_CLIENTID
+
+[State]
+State=$ERP_STATE​​
+Details=$ERP_DETAILS​​
+StartTimestamp=$ERP_TIME_START
+EndTimestamp=
+
+[Images]
+LargeImage=$ERP_ICON
+LargeImageTooltip=
+SmallImage=
+SmallImageTooltip=
+EOL
+}
 # function to create directory and download EasyRP if does not exist
-geteasyrp() {
+wmctrl.get_easyrp() {
     if [[ ! -d "$ERP_DIR" || ! -f "$ERP_DIR/easyrp" ]]; then
         echo "EasyRP not found in '$ERP_DIR'. Downloading now..."
         rm -rf "$ERP_DIR"
@@ -36,151 +59,156 @@ geteasyrp() {
         else
             chmod +x "$ERP_DIR"/easyrp
         fi
-# create initial config file
-cat > "$ERP_DIR"/config.ini << EOL
-[Identifiers]
-ClientID=$ERP_CLIENTID
-
-[State]
-State=null​​
-Details=null​​
-StartTimestamp=
-EndTimestamp=
-
-[Images]
-LargeImage=
-LargeImageTooltip=
-SmallImage=
-SmallImageTooltip=
-EOL
+        # create initial config file
+        wmctrl.write_config "wmctrl-rpc" "" "" "generic-window"
     fi
 }
-# function to check player status using playerctl and update EasyRP config
-function wmctrl.rpc() {
-    while true; do
-        if [[ -f "$ERP_DIR/stoprpc" ]]; then
-            rm -f "$ERP_DIR"/stoprpc
-            break
-        fi
-        source "$ERP_DIR"/wmctrl-rpc.conf
-        # get window hex value using ERP_WINDOW_CLASS from file sourced above
-        ERP_WINDOW_HEX="$(wmctrl -lx | grep -Em1 "\s$ERP_WINDOW_CLASS\s" | cut -f1 -d' ')"
-        if [[ ! -z "$ERP_WINDOW_HEX" ]]; then
-            # set window title by using grep to find matching window hex from above
-            # replace extra spaces with awk so we can get the proper info
-            ERP_WINDOW_TITLE="$(wmctrl -l | grep -Em1 "$ERP_WINDOW_HEX\s" | awk '{gsub(/\s\s*/," ")}1' | cut -f4- -d' ')"
-            ERP_TIME_START=$(date +%s)
-            if [[ "$(echo $ERP_WINDOW_TITLE | grep -e '-')" ]]; then
-                # if title contains '-', the name of the program is most likely in the title, so remove it
-                ERP_DETAILS="$(echo $ERP_WINDOW_TITLE | rev | cut -f2- -d'-' | rev)"
-            else
-                ERP_DETAILS="$ERP_WINDOW_TITLE​​"
-            fi
-            # set state to last part of class set in config file
-            ERP_STATE="$(echo $ERP_WINDOW_CLASS | cut -f2 -d'.' | awk '{gsub(/\\s/," ")}1')"
-            # check icon list for icon matching current window in ERP_ICON_LIST
-            ERP_ICON_CHECK="$(echo $ERP_STATE | tr '[:upper:]' '[:lower:]')"
-            for icon in ${ERP_ICON_LIST[@]}; do
-                if [[ "$icon" =~ "$ERP_ICON_CHECK" ]]; then
-                    ERP_ICON="$icon"
-                fi
-            done
-            if [[ -z "$ERP_ICON" ]]; then
-                ERP_ICON="generic-window"
-            fi
-        # if window not found in 'wmctrl -lx', set details to blank and do not set start time
+# function to select window for tracking using xprop
+wmctrl.win_select() {
+    echo "Please select the window that you would like to track with wmctrl-rpc"
+    ERP_WINDOW_CLASS="$(xprop | grep 'WM_CLASS(STRING)' | cut -f3- -d' ' | rev | sed 's%"%%g;s% %%;s% %s\\%g;s%,%.%g' | rev)"
+    if [[ -z "$ERP_WINDOW_CLASS" ]]; then
+        echo "Window Class for selected window was not found!"
+        echo "You may enter one manually in '$ERP_DIR/wmctrl-rpc.conf'."
+        exit 1
+    fi
+    echo "Selected Window Class: $ERP_WINDOW_CLASS"
+    echo "ERP_WINDOW_CLASS=\"$ERP_WINDOW_CLASS\"" > "$ERP_DIR"/wmctrl-rpc.conf
+    exit 0
+}
+# function to get icon list from github repo
+wmctrl.get_icons() {
+    mkdir -p "$HOME"/.cache
+    curl -sL "https://raw.githubusercontent.com/simoniz0r/wmctrl-rpc/master/wmctrl-rpc-icons.sh" -o "$HOME"/.cache/wmctrl-rpc-icons.sh || \
+    { echo "Failed to get icon list from wmctrl-rpc Github repo!"; exit 1; }
+    source "$HOME"/.cache/wmctrl-rpc-icons.sh
+    if [[ -z "$ERP_ICON_LIST" ]]; then
+        echo "Failed to get icon list from wmctrl-rpc Github repo!"
+        rm -f "$HOME"/.cache/wmctrl-rpc-icons.sh
+        exit 1
+    else
+        export ERP_ICON_LIST
+        rm -f "$HOME"/.cache/wmctrl-rpc-icons.sh
+    fi
+}
+# function to check window title using wmctrl
+wmctrl.get_title() {
+    source "$ERP_DIR"/wmctrl-rpc.conf
+    # get window hex value using ERP_WINDOW_CLASS from file sourced above
+    ERP_WINDOW_HEX="$(wmctrl -lx | grep -Em1 "\s$ERP_WINDOW_CLASS\s" | cut -f1 -d' ')"
+    if [[ ! -z "$ERP_WINDOW_HEX" ]]; then
+        # set window title by using grep to find matching window hex from above
+        # replace extra spaces with awk so we can get the proper info
+        ERP_WINDOW_TITLE="$(wmctrl -l | grep -Em1 "$ERP_WINDOW_HEX\s" | awk '{gsub(/\s\s*/," ")}1' | cut -f4- -d' ')"
+        ERP_TIME_START=$(date +%s)
+        if [[ "$(echo $ERP_WINDOW_TITLE | grep -e '-')" ]]; then
+            # if title contains '-', the name of the program is most likely in the title, so remove it
+            ERP_DETAILS="$(echo $ERP_WINDOW_TITLE | rev | cut -f2- -d'-' | rev)"
         else
-            ERP_DETAILS=""
-            ERP_STATE="$(echo $ERP_WINDOW_CLASS | cut -f2 -d'.')"
-            ERP_ICON_CHECK="$(echo $ERP_STATE | tr '[:upper:]' '[:lower:]')"
-            for icon in ${ERP_ICON_LIST[@]}; do
-                if [[ "$icon" =~ "$ERP_ICON_CHECK" ]]; then
-                    ERP_ICON="$icon"
-                fi
-            done
-            if [[ -z "$ERP_ICON" ]]; then
-                ERP_ICON="generic-window"
+            ERP_DETAILS="$ERP_WINDOW_TITLE​​"
+        fi
+        # set state to last part of class set in config file
+        ERP_STATE="$(echo $ERP_WINDOW_CLASS | cut -f2 -d'.' | awk '{gsub(/\\s/," ")}1')"
+        # check icon list for icon matching current window in ERP_ICON_LIST
+        ERP_ICON_CHECK="$(echo $ERP_STATE | tr '[:upper:]' '[:lower:]')"
+        for icon in ${ERP_ICON_LIST[@]}; do
+            if [[ "$icon" =~ "$ERP_ICON_CHECK" ]]; then
+                ERP_ICON="$icon"
             fi
+        done
+        if [[ -z "$ERP_ICON" ]]; then
+            ERP_ICON="generic-window"
         fi
-        # only write to config file if details do not match last details or state does not match last state
-        if [[ "$ERP_DETAILS" != "$ERP_LAST_DETAILS" || "$ERP_STATE" != "$ERP_LAST_STATE" ]]; then
-cat > "$ERP_DIR"/config.ini << EOL
-[Identifiers]
-ClientID=$ERP_CLIENTID
-
-[State]
-State=$ERP_STATE​​
-Details=$ERP_DETAILS​​
-StartTimestamp=$ERP_TIME_START
-EndTimestamp=
-
-[Images]
-LargeImage=$ERP_ICON
-LargeImageTooltip=
-SmallImage=
-SmallImageTooltip=
-EOL
+    # if window not found in 'wmctrl -lx', set details to blank and do not set start time
+    else
+        ERP_DETAILS=""
+        ERP_STATE="$(echo $ERP_WINDOW_CLASS | cut -f2 -d'.')"
+        ERP_ICON_CHECK="$(echo $ERP_STATE | tr '[:upper:]' '[:lower:]')"
+        for icon in ${ERP_ICON_LIST[@]}; do
+            if [[ "$icon" =~ "$ERP_ICON_CHECK" ]]; then
+                ERP_ICON="$icon"
+            fi
+        done
+        if [[ -z "$ERP_ICON" ]]; then
+            ERP_ICON="generic-window"
         fi
-        # set last used details and state to check against above
-        ERP_LAST_DETAILS="$ERP_DETAILS"
-        ERP_LAST_STATE="$ERP_STATE"
+    fi
+    # only write to config file if details do not match last details or state does not match last state
+    if [[ "$ERP_DETAILS" != "$ERP_LAST_DETAILS" || "$ERP_STATE" != "$ERP_LAST_STATE" ]]; then
+        wmctrl.write_config "$ERP_STATE" "$ERP_DETAILS" "$ERP_TIME_START" "$ERP_ICON"
+    fi
+    # set last used details and state to check against above
+    ERP_LAST_DETAILS="$ERP_DETAILS"
+    ERP_LAST_STATE="$ERP_STATE"
+    # unset used variables to always get most recent info
+    unset ERP_WINDOW_TITLE ERP_WINDOW_TITLE ERP_DETAILS ERP_STATE ERP_TIME_START ERP_ICON ERP_ICON_CHECK
+}
+# function to start EasyRP and while loop that checks window title
+wmctrl.easyrp_start() {
+    cd "$ERP_DIR"
+    rm -f "$ERP_DIR"/nohup.out
+    LD_LINUX_LOC="$(ldd $ERP_DIR/easyrp | grep 'ld-linux' | awk '{print $3}')"
+    case "$LD_LINUX_LOC" in
+        /*) $LD_LINUX_LOC ./easyrp >& ./nohup.out &;;
+        *) ./easyrp >& ./nohup.out &;;
+    esac
+    ERP_PID=$!
+    # make sure EasyRP started and create lock file
+    case $? in
+        0) disown; touch "$ERP_LOCK_FILE";;
+        *) exit 1;;
+    esac
+    # run loop to check title while lock file exists
+    while [[ -f "$ERP_LOCK_FILE" ]]; do
+        wmctrl.get_title
         sleep 3
-        # unset used variables to always get most recent info
-        unset ERP_WINDOW_TITLE ERP_WINDOW_TITLE ERP_DETAILS ERP_STATE ERP_TIME_START ERP_ICON ERP_ICON_CHECK
     done
+    # kill EasyRP if lock file no longer exists
+    kill $ERP_PID || true
 }
 # detect arguments
 case "$1" in
     stop) 
-        touch "$ERP_DIR"/stoprpc
-        if [[ -f "/tmp/.wmctrl.rpc.pid.8675309.conf" ]]; then
-            source /tmp/.wmctrl.rpc.pid.8675309.conf
-            echo "Killing EasyRP PID $ERP_PID and exiting..."
-            kill $ERP_PID || true
-            rm -f /tmp/.wmctrl.rpc.pid.8675309.conf
-        fi
-        ;;
-    window|win)
-        echo "Please select the window that you would like to track with wmctrl-rpc"
-        ERP_WINDOW_CLASS="$(xprop | grep 'WM_CLASS(STRING)' | cut -f3- -d' ' | rev | sed 's%"%%g;s% %%;s% %s\\%g;s%,%.%g' | rev)"
-        if [[ -z "$ERP_WINDOW_CLASS" ]]; then
-            echo "Window Class for selected window was not found!"
-            echo "You may enter one manually in '$ERP_DIR/wmctrl-rpc.conf'."
+        if [[ -f "$ERP_LOCK_FILE" ]]; then
+            echo "Killing EasyRP and exiting..."
+            rm -f "$ERP_LOCK_FILE"
+        else
+            echo "wmctrl-rpc is not running!"
             exit 1
         fi
-        echo "Selected Window Class: $ERP_WINDOW_CLASS"
-        echo "ERP_WINDOW_CLASS=\"$ERP_WINDOW_CLASS\"" > "$ERP_DIR"/wmctrl-rpc.conf
         ;;
+    window|win) wmctrl.win_select;;
     *) 
         if ! ps aux | grep '\./easyrp' | grep -vq grep; then
             echo "Starting wmctrl-rpc..."
-            geteasyrp
-            # source config file
+            wmctrl.get_easyrp
+            # check for config file and select window if doesn't exist
             if [[ ! -f "$ERP_DIR/wmctrl-rpc.conf" ]]; then
-                echo "Please select the window that you would like to track with wmctrl-rpc"
-                ERP_WINDOW_CLASS="$(xprop | grep 'WM_CLASS(STRING)' | cut -f3- -d' ' | rev | sed 's%"%%g;s% %%;s% %s\\%g;s%,%.%g' | rev)"
-                echo "Selected Window Class: $ERP_WINDOW_CLASS"
-                echo "ERP_WINDOW_CLASS=\"$ERP_WINDOW_CLASS\"" > "$ERP_DIR"/wmctrl-rpc.conf
+                wmctrl.win_select
             else
+                # source config file and check if ERP_WINDOW_CLASS is empty
                 source "$ERP_DIR"/wmctrl-rpc.conf
-                echo "Selected Window Class: $ERP_WINDOW_CLASS"
+                if [[ -z "$ERP_WINDOW_CLASS" ]]; then
+                    echo "Window Class was not found!"
+                    wmctrl.win_select
+                else
+                    echo "Selected Window Class: $ERP_WINDOW_CLASS"
+                fi
             fi
-            if [[ -z "$ERP_WINDOW_CLASS" ]]; then
-                echo "Window Class for selected window was not found!"
-                echo "You may enter one manually in '$ERP_DIR/wmctrl-rpc.conf'."
+            # get list of icons from github repo
+            wmctrl.get_icons
+            # start EasyRP
+            wmctrl.easyrp_start & disown
+            sleep 0.5
+            if [[ -f "$ERP_LOCK_FILE" ]]; then
+                echo "wmctrl-rpc started:"
+                cat "$ERP_DIR"/config.ini
+                exit 0
+            else
+                echo "Failed to start EasyRP:"
+                cat "$ERP_DIR"/nohup.out
                 exit 1
             fi
-            wmctrl.rpc & disown
-            cd "$ERP_DIR"
-            rm -f "$ERP_DIR"/nohup.out
-            LD_LINUX_LOC="$(ldd $ERP_DIR/easyrp | grep 'ld-linux' | awk '{print $3}')"
-            case "$LD_LINUX_LOC" in
-                /*) $LD_LINUX_LOC ./easyrp >& ./nohup.out & disown;;
-                *) ./easyrp >& ./nohup.out & disown;;
-            esac
-            echo "ERP_PID=$!" > /tmp/.wmctrl.rpc.pid.8675309.conf
-            source /tmp/.wmctrl.rpc.pid.8675309.conf
-            echo "wmctrl-rpc started; EasyRP PID: $ERP_PID"
         else
             echo "EasyRP is already running:"
             ps aux | grep '\./easyrp' | grep -v grep
