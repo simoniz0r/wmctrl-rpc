@@ -4,7 +4,7 @@ A wrapper for [EasyRP](https://github.com/Pizzabelly/EasyRP) that gets window ti
 
 # Usage
 
-**Dependencies**: curl (used for downloading EasyRP on first run), wmctrl (for getting window titles), xprop (for selecting window to track).
+**Dependencies**: curl (used for downloading EasyRP on first run and grabbing list of icons from [here](https://github.com/simoniz0r/wmctrl-rpc/blob/master/wmctrl-rpc-icons.sh) on each run), wmctrl (for getting window titles), xprop (for selecting window to track).
 
 Just run `wmctrl-rpc`, and it will automatically update your Discord RPC status based on the title of the chosen window.  Run `wmctrl-rpc win` to select a new window to track or edit `~/.local/share/wmctrl-rpc/wmctrl-rpc.conf` and instert a valid window class manually.  Run `wmctrl-rpc stop` to stop `wmctrl-rpc`.
 
