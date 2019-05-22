@@ -4,4 +4,4 @@
 # Description: Contains list of valid icons for wmctrl-rpc
 # License: MIT
 
-ERP_ICON_LIST=("code" "chrome" "falkon" "firefox" "generic-window" "kitty" "mpv" "opensuse" "tux")
+ERP_ICON_LIST=("alacritty" "code" "chrome" "falkon" "firefox" "generic-window" "kitty" "mpv" "opensuse" "tux")
