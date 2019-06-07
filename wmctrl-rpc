@@ -29,7 +29,7 @@ EndTimestamp=
 
 [Images]
 LargeImage=$ERP_ICON
-LargeImageTooltip=
+LargeImageTooltip=$ERP_WINDOW​​
 SmallImage=
 SmallImageTooltip=
 EOL
@@ -101,16 +101,21 @@ wmctrl.get_title() {
         # replace extra spaces with awk so we can get the proper info
         ERP_WINDOW_TITLE="$(wmctrl -l | grep -Em1 "$ERP_WINDOW_HEX\s" | awk '{gsub(/\s\s*/," ")}1' | cut -f4- -d' ')"
         ERP_TIME_START=$(date +%s)
+        # set state to last part of class set in config file
+        ERP_WINDOW="$(echo $ERP_WINDOW_CLASS | cut -f2 -d'.' | awk '{gsub(/\\s/," ")}1')"
+        ERP_STATE="$ERP_WINDOW"
         if [[ "$(echo $ERP_WINDOW_TITLE | grep -e '-')" ]]; then
             # if title contains '-', the name of the program is most likely in the title, so remove it
-            ERP_DETAILS="$(echo $ERP_WINDOW_TITLE | rev | cut -f2- -d'-' | rev)"
+            ERP_DETAILS="$(echo ${ERP_WINDOW_TITLE%-*})"
+            if [[ "$(echo $ERP_DETAILS | grep -e '-')" ]]; then
+                ERP_STATE="$(echo ${ERP_DETAILS%%- *})"
+                ERP_DETAILS="$(echo ${ERP_DETAILS#*- })"
+            fi
         else
             ERP_DETAILS="$ERP_WINDOW_TITLE​​"
         fi
-        # set state to last part of class set in config file
-        ERP_STATE="$(echo $ERP_WINDOW_CLASS | cut -f2 -d'.' | awk '{gsub(/\\s/," ")}1')"
         # check icon list for icon matching current window in ERP_ICON_LIST
-        ERP_ICON_CHECK="$(echo $ERP_STATE | tr '[:upper:]' '[:lower:]')"
+        ERP_ICON_CHECK="$(echo $ERP_WINDOW | tr '[:upper:]' '[:lower:]')"
         for icon in ${ERP_ICON_LIST[@]}; do
             if [[ "$icon" =~ "$ERP_ICON_CHECK" ]]; then
                 ERP_ICON="$icon"
@@ -122,7 +127,8 @@ wmctrl.get_title() {
     # if window not found in 'wmctrl -lx', set details to blank and do not set start time
     else
         ERP_DETAILS=""
-        ERP_STATE="$(echo $ERP_WINDOW_CLASS | cut -f2 -d'.')"
+        ERP_WINDOW="$(echo $ERP_WINDOW_CLASS | cut -f2 -d'.')"
+        ERP_STATE="$ERP_WINDOW"
         ERP_ICON_CHECK="$(echo $ERP_STATE | tr '[:upper:]' '[:lower:]')"
         for icon in ${ERP_ICON_LIST[@]}; do
             if [[ "$icon" =~ "$ERP_ICON_CHECK" ]]; then
