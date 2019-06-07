@@ -97,9 +97,8 @@ wmctrl.get_title() {
     # get window hex value using ERP_WINDOW_CLASS from file sourced above
     ERP_WINDOW_HEX="$(wmctrl -lx | grep -Em1 "\s$ERP_WINDOW_CLASS\s" | cut -f1 -d' ')"
     if [[ ! -z "$ERP_WINDOW_HEX" ]]; then
-        # set window title by using grep to find matching window hex from above
-        # replace extra spaces with awk so we can get the proper info
-        ERP_WINDOW_TITLE="$(wmctrl -l | grep -Em1 "$ERP_WINDOW_HEX\s" | awk '{gsub(/\s\s*/," ")}1' | cut -f4- -d' ')"
+        # get window title using 'xprop -id' and grep the name
+        ERP_WINDOW_TITLE="$(xprop -id "$ERP_WINDOW_HEX" WM_NAME | cut -f2- -d'"' | rev | cut -f2- -d'"' | rev)"
         ERP_TIME_START=$(date +%s)
         # set state to last part of class set in config file
         ERP_WINDOW="$(echo $ERP_WINDOW_CLASS | cut -f2 -d'.' | awk '{gsub(/\\s/," ")}1')"
